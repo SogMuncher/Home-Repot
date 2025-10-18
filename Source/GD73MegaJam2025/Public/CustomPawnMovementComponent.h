@@ -22,6 +22,7 @@ public:
 
 	UCustomPawnMovementComponent();
 
+	virtual void OnRegister() override;
 	virtual void BeginPlay() override;
 	virtual void TickComponent(float DeltaTime, enum ELevelTick TickType, FActorComponentTickFunction* ThisTickFunction) override;
 
@@ -56,11 +57,14 @@ public:
 	UFUNCTION(BlueprintAuthorityOnly)
 	bool ShouldSkipUpdate(float DeltaTime);
 
+	UFUNCTION(BlueprintAuthorityOnly)
+	void CleanInputs();
+
 
 	// ===== Remote Procedure Calls ===== //
 
 	UFUNCTION(Server, Unreliable, BlueprintCallable)
-	void Server_SendMoveInput(const FVector2D& MoveInput);
+	void Server_SendMoveInput(const FVector& MoveInput);
 
 	UFUNCTION(Server, Unreliable, BlueprintCallable)
 	void Server_SendControlRotation(const FRotator& ControlRotation);
@@ -72,22 +76,10 @@ public:
 	// ===== Replication Notify Callbacks ===== //
 
 	UFUNCTION()
-	void OnRep_Velocity();
-
-	UFUNCTION()
 	void OnRep_bIsGrounded();
 
 	UFUNCTION()
-	void OnRep_bCanJump();
-
-	UFUNCTION()
 	void OnRep_bIsJumping();
-
-	UFUNCTION()
-	void OnRep_CapsuleTransform();
-
-	UFUNCTION()
-	void OnRep_LastValidMovementInputVector();
 
 
 	//
@@ -105,9 +97,13 @@ public:
 
 	// ===== Spring Parameters ===== //
 
-	// Strength of Gravity applied to the character in units per second squared
+	// Strength of Gravity applied to the character in units per second squared (ACCELERATION IN CM/S^2)
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Spring")
 	float Gravity = 980.f;
+
+	// Mass of the character used for Gravity
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Spring")
+	float Mass = 1.f;
 
 	// Strength of the Spring Force applied to the character
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Spring")
@@ -129,16 +125,16 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Spring")
 	FVector SpringTraceDirection = FVector(0.f, 0.f, -1.f);
 
-	// Controls whether the spring can apply force towards the ground, sometimes undesirable. E.G. We want to tstick to the ground, but we do not want to accelerate towards it after losing grounded status
-	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Spring")
-	bool bAllowSpringDownwardForce = true;
-
 
 	// ===== Locomotion Parameters ===== //
 
-	// Maximum speed of the character
+	// Maximum Ground speed of the character
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
-	float MaxSpeed = 500.f;
+	float MaxGroundSpeed = 500.f;
+
+	// Maximum Air speed of the character
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
+	float MaxAirSpeed = 1000.f;
 
 	// Acceleration rate applied when changing velocity
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
@@ -207,13 +203,17 @@ public:
 	// ===== Replicated ===== //
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|State|Movement", Replicated)
-	FVector Velocity;
+	FVector CapsuleVelocity;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|State|Movement", Replicated)
 	FVector GoalVelocity;
 
-	UPROPERTY(EditAnywhere,   BlueprintReadWrite, Category = "CustomPhysics|State|Movement", ReplicatedUsing = OnRep_bIsGrounded)
-	bool bIsGrounded = false;
+	UPROPERTY(EditAnywhere,   BlueprintReadWrite, Category = "CustomPhysics|State|Movement", Replicated)
+	bool bGroundDetected = false;
+
+	// Controls whether the spring can apply force towards the ground, sometimes undesirable. E.G. We want to tstick to the ground, but we do not want to accelerate towards it after losing grounded status
+	UPROPERTY(EditAnywhere,	  BlueprintReadWrite, Category = "CustomPhysics|State|Movement", ReplicatedUsing = OnRep_bIsGrounded)
+	bool bIsGrounded = true;
 
 	UPROPERTY(EditAnywhere,   BlueprintReadWrite, Category = "CustomPhysics|State|Movement", Replicated)
 	bool bCanJump = true;
