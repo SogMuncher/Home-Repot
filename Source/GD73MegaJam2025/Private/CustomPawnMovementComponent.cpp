@@ -101,9 +101,10 @@ void UCustomPawnMovementComponent::ApplySpringForce(float DeltaTime)
 
 
 	// Ground Check
-	FHitResult LastGroundHitResult;
+	FHitResult LastGroundHitResult; 
+	const FVector RelativeSpringTraceDirection = bSpringTraceInWorldSpace ? FVector::DownVector : Capsule->GetComponentQuat().RotateVector(SpringTraceDirection);
 	const FVector SpringStartLocation = Capsule->GetComponentLocation();
-	const FVector SpringEndLocation = SpringStartLocation + (SpringTraceDirection * SpringLength);
+	const FVector SpringEndLocation = SpringStartLocation + (RelativeSpringTraceDirection * SpringLength);
 	FCollisionQueryParams CollisionParams;
 	CollisionParams.AddIgnoredActor(PawnOwner); // Ignore Self in Ground Check
 
@@ -131,7 +132,7 @@ void UCustomPawnMovementComponent::ApplySpringForce(float DeltaTime)
 	{
 		TimeSinceGrounded = 0.f;
 
-		const float RelativeVelocity = FVector::DotProduct(SpringTraceDirection, CapsuleVelocity);		  	 // Velocity along spring direction
+		const float RelativeVelocity = FVector::DotProduct(RelativeSpringTraceDirection, CapsuleVelocity);		  	 // Velocity along spring direction
 		const float SpringOffset	 = LastGroundHitResult.Distance - SpringRideHeight;						 // Positive if above ride height, Negative if below
 		const float SpringForce		 = (SpringOffset * SpringStrength) - (RelativeVelocity * SpringDamping); // Hooke's Law with Damping
 
@@ -154,8 +155,23 @@ void UCustomPawnMovementComponent::ApplySpringForce(float DeltaTime)
 		}
 
 		// Apply Spring Force if Grounded and nothing prevents it
-		Capsule->AddForce(SpringTraceDirection * SpringForce, BoneName, BIsIgnoringMass);
+		Capsule->AddForce(RelativeSpringTraceDirection * SpringForce, BoneName, BIsIgnoringMass);
 	}
+
+#if WITH_EDITOR
+	// Debug Spring Trace
+	if (bEnableDebugDrawing)
+	{
+		FColor LineColor = bGroundDetected ? FColor::Green : FColor::Red;
+		DrawDebugLine(GetWorld(), SpringStartLocation, SpringEndLocation, LineColor, false, -1.f, 0, 2.f);
+		if (bGroundDetected == true)
+		{
+			DrawDebugPoint(GetWorld(), LastGroundHitResult.ImpactPoint, 10.f, FColor::Yellow, false, -1.f, 0);
+		}
+		DrawDebugLine(GetWorld(), Capsule->GetComponentLocation() + (FVector::DownVector * 25.f), Capsule->GetComponentLocation() + (CapsuleVelocity), FColor::Blue, false, -1.f, 0, 2.f);
+		DrawDebugLine(GetWorld(), Capsule->GetComponentLocation() + (FVector::DownVector * 25.f), Capsule->GetComponentLocation() + (LastReceivedMoveInput * (bIsGrounded ? MaxGroundSpeed : MaxAirSpeed)), FColor::Cyan, false, -1.f, 0, 2.f);
+	}
+#endif
 }
 
 void UCustomPawnMovementComponent::ApplyMovementForce(float DeltaTime)
@@ -205,7 +221,7 @@ void UCustomPawnMovementComponent::ApplyMovementForce(float DeltaTime)
 	Capsule->SetPhysicsLinearVelocity(ClampedNeededForce, true);
 
 
-	if (LastReceivedMoveInput != FVector::Zero())
+	if (LastReceivedMoveInput.IsNearlyZero() == false)
 	{
 		LastValidMovementInputVector = LastReceivedMoveInput;
 	}
@@ -276,7 +292,10 @@ void UCustomPawnMovementComponent::ApplyRotationForce(float DeltaTime)
 	TargetRotation = FRotator(0, Yaw, Roll);
 	TargetQuaternion = FQuat(TargetRotation);
 
-	bool bIsMovingForward = LastReceivedMoveInput.GetSafeNormal().Equals(TargetQuaternion.GetForwardVector(), .01f);
+	float ForwardDot       = FVector::DotProduct(LastValidMovementInputVector.GetSafeNormal(), TargetQuaternion.GetForwardVector());
+	bool bIsMovingForward  = ForwardDot > 0.95f;
+	bool bIsMovingBackward = ForwardDot < -0.95f;
+
 
 	// if we are moving forward use the normal pitch calculation, 
 	// We cannot use FRotationMatrix::MakeFromZX and tell it to use the same vector for both up and forward
@@ -285,9 +304,14 @@ void UCustomPawnMovementComponent::ApplyRotationForce(float DeltaTime)
 		TargetRotation = FRotator(-Pitch, Yaw, Roll);
 		TargetQuaternion = FQuat(TargetRotation);
 	}
-	else if (bIsMovingForward == false)
+	else if (bIsMovingBackward == true)
 	{
-		TargetQuaternion = FQuat::Slerp(TargetQuaternion, FRotationMatrix::MakeFromZX(LastValidMovementInputVector, TargetQuaternion.GetForwardVector()).ToQuat(), Pitch / 90);
+		TargetRotation = FRotator(Pitch, Yaw, Roll);
+		TargetQuaternion = FQuat(TargetRotation);
+	}
+	else if (bIsMovingForward == false && bIsMovingBackward == false)
+	{
+		TargetQuaternion = FQuat::Slerp(TargetQuaternion, FRotationMatrix::MakeFromZX(LastValidMovementInputVector.GetSafeNormal(), TargetQuaternion.GetForwardVector()).ToQuat(), Pitch / 90);
 	}
 
 	// Upright force
@@ -297,7 +321,7 @@ void UCustomPawnMovementComponent::ApplyRotationForce(float DeltaTime)
 	float UprightRadians = 0.0f;
 	UprightQuaternionBetween.ToAxisAndAngle(UprightAxis, UprightRadians);
 
-	FVector UprightTorque = (UprightAxis * (UprightRadians * RotationSpringStrength) - (CurrentAngularVelocity * RotationSpringDamping));
+	FVector UprightTorque = (UprightAxis * (UprightRadians * UprightSpringStrength) - (CurrentAngularVelocity * UprightSpringDamping));
 
 	Capsule->AddTorqueInRadians(UprightTorque, NAME_None, true);
 

@@ -103,15 +103,15 @@ public:
 
 	// Mass of the character used for Gravity
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Spring")
-	float Mass = 1.f;
+	float Mass = 1.5f;
 
 	// Strength of the Spring Force applied to the character
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Spring")
-	float SpringStrength = 85.f;
+	float SpringStrength = 150.f;
 
 	// Damping factor for the spring to reduce oscillation
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Spring")
-	float SpringDamping = 7.5f;
+	float SpringDamping = 15.f;
 
 	// Desired distance from the ground the spring will try to maintain
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Spring")
@@ -125,24 +125,28 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Spring")
 	FVector SpringTraceDirection = FVector(0.f, 0.f, -1.f);
 
+	// Whether to trace relative to the character's rotation or world space
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Spring")
+	bool bSpringTraceInWorldSpace = true;
+
 
 	// ===== Locomotion Parameters ===== //
 
 	// Maximum Ground speed of the character
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
-	float MaxGroundSpeed = 500.f;
+	float MaxGroundSpeed = 1500.f;
 
 	// Maximum Air speed of the character
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
-	float MaxAirSpeed = 1000.f;
+	float MaxAirSpeed = 5000.f;
 
 	// Acceleration rate applied when changing velocity
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
-	float Acceleration = 500.f;
+	float Acceleration = 1250.f;
 
 	// Maximum force allowed to be applied for movement
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
-	float MaxMovementForce = 15.f;
+	float MaxMovementForce = 200.f;
 
 	// Acceleration multiplier when moving against current velocity
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
@@ -153,30 +157,30 @@ public:
 
 	// Speed at which the character rotates
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Rotation")
-	float RotationSpringStrength = 100.f;
+	float RotationSpringStrength = 250.f;
 
 	// Damping factor for the yaw rotation to reduce oscillations
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Rotation")
-	float RotationSpringDamping = 5.f;
+	float RotationSpringDamping = 15.f;
 
 	// Speed at which the character rotates back to upright
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Rotation")
-	float UprightSpringStrength = 100.f;
+	float UprightSpringStrength = 500.f;
 
 	// Damping factor for the upright rotation to reduce oscillations
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Rotation")
-	float UprightSpringDamping = 10.f;
+	float UprightSpringDamping = 50.f;
 
 	// Maximimum tilt amount applied to the character when moving fully against current velocity
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Rotation")
-	float MaxTiltDegrees = 60.f;
+	float MaxTiltDegrees = 45.f;
 
 
 	// ===== Jumping Parameters ===== //
 
 	// Force applied when the character jumps
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Jumping")
-	float JumpForce = 400.f;
+	float JumpForce = 1000.f;
 
 	// Air control multiplier applied when the character is in the air
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Jumping")
@@ -212,13 +216,13 @@ public:
 	bool bGroundDetected = false;
 
 	// Controls whether the spring can apply force towards the ground, sometimes undesirable. E.G. We want to tstick to the ground, but we do not want to accelerate towards it after losing grounded status
-	UPROPERTY(EditAnywhere,	  BlueprintReadWrite, Category = "CustomPhysics|State|Movement", ReplicatedUsing = OnRep_bIsGrounded)
+	UPROPERTY(EditAnywhere,	   BlueprintReadWrite, Category = "CustomPhysics|State|Movement", ReplicatedUsing = OnRep_bIsGrounded)
 	bool bIsGrounded = true;
 
-	UPROPERTY(EditAnywhere,   BlueprintReadWrite, Category = "CustomPhysics|State|Movement", Replicated)
+	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Movement", Replicated)
 	bool bCanJump = true;
 
-	UPROPERTY(EditAnywhere,   BlueprintReadWrite, Category = "CustomPhysics|State|Movement", ReplicatedUsing = OnRep_bIsJumping)
+	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Movement", ReplicatedUsing = OnRep_bIsJumping)
 	bool bIsJumping = false;
 
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|State|Movement", Replicated)
@@ -233,14 +237,17 @@ public:
 	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|State|Input",    Replicated)
 	FVector MovementInputNormalized;
 
-	UPROPERTY(EditAnywhere,   BlueprintReadWrite, Category = "CustomPhysics|State|Capsule",  Replicated)
+	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Capsule",  Replicated)
 	FTransform CapsuleTransform;
 
-	UPROPERTY(EditAnywhere,   BlueprintReadWrite, Category = "CustomPhysics|State|Capsule",  Replicated)
+	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Capsule",  Replicated)
 	FRotator CurrentBodyRotation;
 
 	UPROPERTY(EditAnywhere,    BlueprintReadOnly, Category = "CustomPhysics|State|Capsule",  Replicated)
 	FVector CurrentBodyForwardVector;
+
+	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Debug", Replicated)
+	bool bEnableDebugDrawing = true;
 
 
 	// ===== Authoratative inputs received from owning client ===== //
