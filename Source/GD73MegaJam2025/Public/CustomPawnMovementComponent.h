@@ -52,6 +52,9 @@ public:
 	void Jump();
 
 	UFUNCTION(BlueprintAuthorityOnly)
+	void SetSlide(bool bShouldSlide);
+
+	UFUNCTION(BlueprintAuthorityOnly)
 	void UpdateTimers(float DeltaTime);
 
 	UFUNCTION(BlueprintAuthorityOnly)
@@ -71,6 +74,9 @@ public:
 
 	UFUNCTION(Server, Reliable, BlueprintCallable)
 	void Server_RequestJump();
+
+	UFUNCTION(Server, Reliable, BlueprintCallable)
+	void Server_RequestSlide(bool bShouldSlide);
 
 
 	// ===== Replication Notify Callbacks ===== //
@@ -152,6 +158,22 @@ public:
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
 	UCurveFloat* TurnDotMultiplierCurve;
 
+	// Multiplier applied to slide force from Gravity
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
+	float SlideGravityMultiplier = 1.f;
+
+	// Multiplier applied to slide force from Input
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
+	float SlideSteeringMultiplier = .25f;
+
+	// Multiplier applied to slide force when initiating a slide
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
+	float SlideBoostMultiplier = 5.f;
+
+	// Amount of damping applied to slide velocity (friction)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
+	float SlideDamping = 1.f;
+
 
 	// ===== Rotation Parameters ===== //
 
@@ -181,6 +203,10 @@ public:
 	// Force applied when the character jumps
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Jumping")
 	float JumpForce = 1000.f;
+
+	// Force Multiplier applied on the X and Y axis when the character jumps
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Jumping")
+	float JumpHorizontalMultiplier = 1.2f;
 
 	// Air control multiplier applied when the character is in the air
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Jumping")
@@ -215,9 +241,15 @@ public:
 	UPROPERTY(EditAnywhere,   BlueprintReadWrite, Category = "CustomPhysics|State|Movement", Replicated)
 	bool bGroundDetected = false;
 
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|State|Movement", Replicated)
+	FHitResult LastGroundHitResult;
+
 	// Controls whether the spring can apply force towards the ground, sometimes undesirable. E.G. We want to tstick to the ground, but we do not want to accelerate towards it after losing grounded status
 	UPROPERTY(EditAnywhere,	   BlueprintReadWrite, Category = "CustomPhysics|State|Movement", ReplicatedUsing = OnRep_bIsGrounded)
 	bool bIsGrounded = true;
+
+	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Movement", Replicated)
+	bool bIsSliding = false;
 
 	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Movement", Replicated)
 	bool bCanJump = true;

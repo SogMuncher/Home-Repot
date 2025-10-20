@@ -101,10 +101,9 @@ void UCustomPawnMovementComponent::ApplySpringForce(float DeltaTime)
 
 
 	// Ground Check
-	FHitResult LastGroundHitResult; 
 	const FVector RelativeSpringTraceDirection = bSpringTraceInWorldSpace ? FVector::DownVector : Capsule->GetComponentQuat().RotateVector(SpringTraceDirection);
-	const FVector SpringStartLocation = Capsule->GetComponentLocation();
-	const FVector SpringEndLocation = SpringStartLocation + (RelativeSpringTraceDirection * SpringLength);
+	const FVector SpringStartLocation          = Capsule->GetComponentLocation();
+	const FVector SpringEndLocation            = SpringStartLocation + (RelativeSpringTraceDirection * SpringLength);
 	FCollisionQueryParams CollisionParams;
 	CollisionParams.AddIgnoredActor(PawnOwner); // Ignore Self in Ground Check
 
@@ -132,9 +131,9 @@ void UCustomPawnMovementComponent::ApplySpringForce(float DeltaTime)
 	{
 		TimeSinceGrounded = 0.f;
 
-		const float RelativeVelocity = FVector::DotProduct(RelativeSpringTraceDirection, CapsuleVelocity);		  	 // Velocity along spring direction
-		const float SpringOffset	 = LastGroundHitResult.Distance - SpringRideHeight;						 // Positive if above ride height, Negative if below
-		const float SpringForce		 = (SpringOffset * SpringStrength) - (RelativeVelocity * SpringDamping); // Hooke's Law with Damping
+		const float RelativeVelocity  = FVector::DotProduct(RelativeSpringTraceDirection, CapsuleVelocity);						  // Velocity along spring direction
+		const float SpringOffset      = LastGroundHitResult.Distance - (bIsSliding ? SpringRideHeight * .75f : SpringRideHeight); // Positive if above ride height, Negative if below
+		const float SpringForce		  = (SpringOffset * SpringStrength) - (RelativeVelocity * SpringDamping);					  // Hooke's Law with Damping
 
 		const bool BIsBelowRideHeight = (SpringOffset < 0);
 		const bool BIsInJumpBuffer    = (JumpCooldownTimer <= JumpCooldownTime);
@@ -145,8 +144,14 @@ void UCustomPawnMovementComponent::ApplySpringForce(float DeltaTime)
 			// This code should only run once when we land after being ungrounded
 			if (BIsBelowRideHeight && BIsInJumpBuffer == false) 
 			{
-				bIsGrounded = true; // Re-enable downward spring force after being ungrounded and then landing
-				bIsJumping = false; // Reset jumping state upon landing
+				bIsGrounded = true;  // Re-enable downward spring force after being ungrounded and then landing
+				bIsJumping  = false; // Reset jumping state upon landing
+
+				if (bIsSliding == true)
+				{
+					FVector SlideForce = FVector::VectorPlaneProject(CapsuleVelocity, LastGroundHitResult.Normal);
+					Capsule->AddForce(SlideForce * SlideBoostMultiplier, BoneName, BIsIgnoringMass);
+				}
 			}
 			else 
 			{
@@ -217,8 +222,23 @@ void UCustomPawnMovementComponent::ApplyMovementForce(float DeltaTime)
 	// Clamp to tuned Max Force
 	const FVector ClampedNeededForce = NeededForceToReachGoalVelocity.GetClampedToMaxSize(MaxMovementForce * AccelerationMultiplier);
 
-	// Apply Movement Force
-	Capsule->SetPhysicsLinearVelocity(ClampedNeededForce, true);
+
+	// If Sliding
+	if (bIsSliding == true && bIsGrounded == true)
+	{
+		FVector SlideGravity       = FVector::VectorPlaneProject(FVector::DownVector * (Gravity * Mass), LastGroundHitResult.Normal);
+		FVector SlideSteering      = FVector::VectorPlaneProject(LastReceivedMoveInput.GetSafeNormal() * MaxGroundSpeed, LastGroundHitResult.Normal);
+		float   SlideControl       = FVector(CapsuleVelocity.X, CapsuleVelocity.Y, 0).Length() / MaxGroundSpeed;
+		FVector SlideForce         = (SlideGravity * SlideGravityMultiplier) + ((SlideSteering * SlideSteeringMultiplier) * SlideControl);
+		const FName BoneName       = NAME_None;
+		const bool BIsIgnoringMass = true; // We use our own mass calculations
+		Capsule->AddForce(SlideForce - (CapsuleVelocity * SlideDamping), BoneName, BIsIgnoringMass);
+	}
+	else
+	{
+		// Apply Movement Force
+		Capsule->SetPhysicsLinearVelocity(ClampedNeededForce, true);
+	}
 
 
 	if (LastReceivedMoveInput.IsNearlyZero() == false)
@@ -336,6 +356,15 @@ void UCustomPawnMovementComponent::ApplyRotationForce(float DeltaTime)
 	YawTorque *= Capsule->GetUpVector(); // Ensure torque is applied around the up vector
 
 	Capsule->AddTorqueInRadians(YawTorque, NAME_None, true);
+
+
+	// Prevent over-rotation
+	Pitch = FMath::Clamp(Capsule->GetComponentRotation().Pitch, -90, 90);
+	Yaw = Capsule->GetComponentRotation().Yaw;
+	Roll = FMath::Clamp(Capsule->GetComponentRotation().Roll, -MaxTiltDegrees, MaxTiltDegrees);
+
+	FRotator ClampedRotation = FRotator(Pitch, Yaw, Roll);
+	Capsule->SetAllPhysicsRotation(ClampedRotation);
 }
 
 void UCustomPawnMovementComponent::Jump()
@@ -347,11 +376,25 @@ void UCustomPawnMovementComponent::Jump()
 		CapsuleVelocity.Z = 0;
 	}
 
-	Capsule->SetPhysicsLinearVelocity(FVector(CapsuleVelocity.X * 1.2, CapsuleVelocity.Y * 1.2, JumpForce), false); // Shhh.. dont tell anyone jumping makes you faster
+	Capsule->SetPhysicsLinearVelocity(FVector(CapsuleVelocity.X * JumpHorizontalMultiplier, CapsuleVelocity.Y * JumpHorizontalMultiplier, JumpForce), false); // Shhh.. dont tell anyone jumping makes you faster
 
 	JumpCooldownTimer = 0.0f; // Reset jump cooldown timer
 	bIsJumping = true;
 	bCanJump = false;
+}
+
+void UCustomPawnMovementComponent::SetSlide(bool bShouldSlide)
+{
+	bIsSliding = bShouldSlide;
+
+	if (bIsGrounded == true && bIsSliding == true)
+	{
+		const FName BoneName = NAME_None;
+		const bool BIsIgnoringMass = true; // We use our own mass calculations
+
+		FVector SlideForce = FVector::VectorPlaneProject(CapsuleVelocity, LastGroundHitResult.Normal);
+		Capsule->AddForce(SlideForce * SlideBoostMultiplier, BoneName, BIsIgnoringMass);
+	}
 }
 
 void UCustomPawnMovementComponent::UpdateTimers(float DeltaTime)
@@ -412,6 +455,11 @@ void UCustomPawnMovementComponent::Server_SendControlRotation_Implementation(con
 void UCustomPawnMovementComponent::Server_RequestJump_Implementation()
 {
 	Jump();
+}
+
+void UCustomPawnMovementComponent::Server_RequestSlide_Implementation(bool bShouldSlide)
+{
+	SetSlide(bShouldSlide);
 }
 
 
