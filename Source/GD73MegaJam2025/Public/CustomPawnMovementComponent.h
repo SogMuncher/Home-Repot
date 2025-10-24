@@ -6,9 +6,7 @@
 #include "GameFramework/PawnMovementComponent.h"
 #include "CustomPawnMovementComponent.generated.h"
 
-/**
- * 
- */
+
 UCLASS(meta = (BlueprintSpawnableComponent))
 class GD73MEGAJAM2025_API UCustomPawnMovementComponent : public UPawnMovementComponent
 {
@@ -58,7 +56,7 @@ public:
 	void UpdateTimers(float DeltaTime);
 
 	UFUNCTION(BlueprintAuthorityOnly)
-	bool ShouldSkipUpdate(float DeltaTime);
+	bool ShouldSkipTick(float DeltaTime);
 
 	UFUNCTION(BlueprintAuthorityOnly)
 	void CleanInputs();
@@ -92,7 +90,7 @@ public:
 	// ===== COMPONENTS ===== //
 	//
 
-	UPROPERTY(VisibleAnywhere, Category = "CustomPhysics|Components")
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|Components")
 	class UCapsuleComponent* Capsule;
 
 
@@ -157,6 +155,10 @@ public:
 	// Acceleration multiplier when moving against current velocity
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
 	UCurveFloat* TurnDotMultiplierCurve;
+
+	// Multiplier applied to Ride Height when sliding (this should be less than 1 to make the pawn lower to the ground)
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
+	float SlideRideHeightMultiplier = .5f;
 
 	// Multiplier applied to slide force from Gravity
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "CustomPhysics|Movement|Locomotion")
@@ -232,21 +234,24 @@ public:
 
 	// ===== Replicated ===== //
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|State|Movement", Replicated)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,  Category = "CustomPhysics|State|Movement", Replicated)
 	FVector CapsuleVelocity;
-
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|State|Movement", Replicated)
+	
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,  Category = "CustomPhysics|State|Movement", Replicated)
 	FVector GoalVelocity;
 
-	UPROPERTY(EditAnywhere,   BlueprintReadWrite, Category = "CustomPhysics|State|Movement", Replicated)
+	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Movement", Replicated)
 	bool bGroundDetected = false;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|State|Movement", Replicated)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,  Category = "CustomPhysics|State|Movement", Replicated)
 	FHitResult LastGroundHitResult;
 
 	// Controls whether the spring can apply force towards the ground, sometimes undesirable. E.G. We want to tstick to the ground, but we do not want to accelerate towards it after losing grounded status
 	UPROPERTY(EditAnywhere,	   BlueprintReadWrite, Category = "CustomPhysics|State|Movement", ReplicatedUsing = OnRep_bIsGrounded)
 	bool bIsGrounded = true;
+
+	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Movement", Replicated)
+	bool bCanMove = true;
 
 	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Movement", Replicated)
 	bool bIsSliding = false;
@@ -257,28 +262,31 @@ public:
 	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Movement", ReplicatedUsing = OnRep_bIsJumping)
 	bool bIsJumping = false;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|State|Movement", Replicated)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,  Category = "CustomPhysics|State|Movement", Replicated)
 	float TimeSinceGrounded = 0.f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|State|Movement", Replicated)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,  Category = "CustomPhysics|State|Movement", Replicated)
 	float JumpCooldownTimer = 0.f;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|State|Input",    Replicated)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,  Category = "CustomPhysics|State|Input",    Replicated)
 	FVector LastValidMovementInputVector;
 
-	UPROPERTY(VisibleAnywhere, BlueprintReadOnly, Category = "CustomPhysics|State|Input",    Replicated)
+	UPROPERTY(VisibleAnywhere, BlueprintReadOnly,  Category = "CustomPhysics|State|Input",    Replicated)
 	FVector MovementInputNormalized;
 
 	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Capsule",  Replicated)
 	FTransform CapsuleTransform;
 
 	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Capsule",  Replicated)
+	bool bIsUsingUprightSpring = true;
+
+	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Capsule",  Replicated)
 	FRotator CurrentBodyRotation;
 
-	UPROPERTY(EditAnywhere,    BlueprintReadOnly, Category = "CustomPhysics|State|Capsule",  Replicated)
+	UPROPERTY(EditAnywhere,    BlueprintReadOnly,  Category = "CustomPhysics|State|Capsule",  Replicated)
 	FVector CurrentBodyForwardVector;
 
-	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Debug", Replicated)
+	UPROPERTY(EditAnywhere,    BlueprintReadWrite, Category = "CustomPhysics|State|Debug",    Replicated)
 	bool bEnableDebugDrawing = true;
 
 

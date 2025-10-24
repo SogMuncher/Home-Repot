@@ -42,8 +42,8 @@ void UCustomPawnMovementComponent::OnRegister()
 		}
 	}
 
-	Capsule->SetCapsuleHalfHeight(45.f);
-	Capsule->SetCapsuleRadius(35.f);
+	//Capsule->SetCapsuleHalfHeight(45.f);
+	//Capsule->SetCapsuleRadius(35.f);
 	Capsule->SetSimulatePhysics(true);
 	Capsule->SetEnableGravity(false);
 	Capsule->SetIsReplicated(true);
@@ -64,7 +64,7 @@ void UCustomPawnMovementComponent::TickComponent(float DeltaTime, enum ELevelTic
 {
 	Super::TickComponent(DeltaTime, TickType, ThisTickFunction);
 
-	if (ShouldSkipUpdate(DeltaTime) == true) return;
+	if (ShouldSkipTick(DeltaTime) == true) return;
 
 	if (PawnOwner->HasAuthority() == true) // ===== SERVER ===== //
 	{
@@ -131,9 +131,10 @@ void UCustomPawnMovementComponent::ApplySpringForce(float DeltaTime)
 	{
 		TimeSinceGrounded = 0.f;
 
-		const float RelativeVelocity  = FVector::DotProduct(RelativeSpringTraceDirection, CapsuleVelocity);						  // Velocity along spring direction
-		const float SpringOffset      = LastGroundHitResult.Distance - (bIsSliding ? SpringRideHeight * .75f : SpringRideHeight); // Positive if above ride height, Negative if below
-		const float SpringForce		  = (SpringOffset * SpringStrength) - (RelativeVelocity * SpringDamping);					  // Hooke's Law with Damping
+		const float RideHeight        = bIsSliding ? SpringRideHeight * SlideRideHeightMultiplier : SpringRideHeight; // Adjust ride height if sliding
+		const float RelativeVelocity  = FVector::DotProduct(RelativeSpringTraceDirection, CapsuleVelocity);			  // Velocity along spring direction
+		const float SpringOffset      = LastGroundHitResult.Distance - RideHeight;									  // Positive if above ride height, Negative if below
+		const float SpringForce		  = (SpringOffset * SpringStrength) - (RelativeVelocity * SpringDamping);		  // Hooke's Law with Damping
 
 		const bool BIsBelowRideHeight = (SpringOffset < 0);
 		const bool BIsInJumpBuffer    = (JumpCooldownTimer <= JumpCooldownTime);
@@ -144,14 +145,16 @@ void UCustomPawnMovementComponent::ApplySpringForce(float DeltaTime)
 			// This code should only run once when we land after being ungrounded
 			if (BIsBelowRideHeight && BIsInJumpBuffer == false) 
 			{
-				bIsGrounded = true;  // Re-enable downward spring force after being ungrounded and then landing
-				bIsJumping  = false; // Reset jumping state upon landing
-
+				// Slide Boost
 				if (bIsSliding == true)
 				{
 					FVector SlideForce = FVector::VectorPlaneProject(CapsuleVelocity, LastGroundHitResult.Normal);
 					Capsule->AddForce(SlideForce * SlideBoostMultiplier, BoneName, BIsIgnoringMass);
 				}
+
+				// Grounded Reset
+				bIsGrounded = true;  // Re-enable downward spring force after being ungrounded and then landing
+				bIsJumping  = false;  // Reset jumping state upon landing
 			}
 			else 
 			{
@@ -160,7 +163,10 @@ void UCustomPawnMovementComponent::ApplySpringForce(float DeltaTime)
 		}
 
 		// Apply Spring Force if Grounded and nothing prevents it
-		Capsule->AddForce(RelativeSpringTraceDirection * SpringForce, BoneName, BIsIgnoringMass);
+		if (bCanMove == true)
+		{
+			Capsule->AddForce(RelativeSpringTraceDirection * SpringForce, BoneName, BIsIgnoringMass);
+		}
 	}
 
 #if WITH_EDITOR
@@ -216,12 +222,6 @@ void UCustomPawnMovementComponent::ApplyMovementForce(float DeltaTime)
 	// Interp to Goal Velocity using Acceleration
 	GoalVelocity = FMath::VInterpConstantTo(GoalVelocity, GoalMaxVelocity, DeltaTime, Acceleration * AccelerationMultiplier);
 
-	// Calculate the Force need to reach Goal Velocity this frame
-	const FVector NeededForceToReachGoalVelocity = FVector(GoalVelocity.X, GoalVelocity.Y, 0) - FVector(CapsuleVelocity.X, CapsuleVelocity.Y, 0);
-
-	// Clamp to tuned Max Force
-	const FVector ClampedNeededForce = NeededForceToReachGoalVelocity.GetClampedToMaxSize(MaxMovementForce * AccelerationMultiplier);
-
 
 	// If Sliding
 	if (bIsSliding == true && bIsGrounded == true)
@@ -234,8 +234,22 @@ void UCustomPawnMovementComponent::ApplyMovementForce(float DeltaTime)
 		const bool BIsIgnoringMass = true; // We use our own mass calculations
 		Capsule->AddForce(SlideForce - (CapsuleVelocity * SlideDamping), BoneName, BIsIgnoringMass);
 	}
+	else if (bCanMove == false)
+	{
+		if (bIsSliding == false)
+		{
+			// This should preserve momentum out of actions but keep the "drifting" slide + movement storage tech
+			GoalVelocity = CapsuleVelocity;
+		}
+	}
 	else
 	{
+		// Calculate the Force need to reach Goal Velocity this frame
+		const FVector NeededForceToReachGoalVelocity = FVector(GoalVelocity.X, GoalVelocity.Y, 0) - FVector(CapsuleVelocity.X, CapsuleVelocity.Y, 0);
+
+		// Clamp to tuned Max Force
+		const FVector ClampedNeededForce = NeededForceToReachGoalVelocity.GetClampedToMaxSize(MaxMovementForce * AccelerationMultiplier);
+
 		// Apply Movement Force
 		Capsule->SetPhysicsLinearVelocity(ClampedNeededForce, true);
 	}
@@ -334,16 +348,19 @@ void UCustomPawnMovementComponent::ApplyRotationForce(float DeltaTime)
 		TargetQuaternion = FQuat::Slerp(TargetQuaternion, FRotationMatrix::MakeFromZX(LastValidMovementInputVector.GetSafeNormal(), TargetQuaternion.GetForwardVector()).ToQuat(), Pitch / 90);
 	}
 
-	// Upright force
-	FQuat UprightQuaternionBetween = FQuat::FindBetween(CurrentQuaternion.GetUpVector(), TargetQuaternion.GetUpVector());
+	if (bIsUsingUprightSpring == true)
+	{
+		// Upright force
+		FQuat UprightQuaternionBetween = FQuat::FindBetween(CurrentQuaternion.GetUpVector(), TargetQuaternion.GetUpVector());
 
-	FVector UprightAxis = FVector::ZeroVector;
-	float UprightRadians = 0.0f;
-	UprightQuaternionBetween.ToAxisAndAngle(UprightAxis, UprightRadians);
+		FVector UprightAxis = FVector::ZeroVector;
+		float UprightRadians = 0.0f;
+		UprightQuaternionBetween.ToAxisAndAngle(UprightAxis, UprightRadians);
 
-	FVector UprightTorque = (UprightAxis * (UprightRadians * UprightSpringStrength) - (CurrentAngularVelocity * UprightSpringDamping));
+		FVector UprightTorque = (UprightAxis * (UprightRadians * UprightSpringStrength) - (CurrentAngularVelocity * UprightSpringDamping));
 
-	Capsule->AddTorqueInRadians(UprightTorque, NAME_None, true);
+		Capsule->AddTorqueInRadians(UprightTorque, NAME_None, true);
+	}
 
 	// Yaw force
 	FQuat YawQuaternionBetween = FQuat::FindBetween(CurrentQuaternion.GetForwardVector(), TargetQuaternion.GetForwardVector());
@@ -359,9 +376,9 @@ void UCustomPawnMovementComponent::ApplyRotationForce(float DeltaTime)
 
 
 	// Prevent over-rotation
-	Pitch = FMath::Clamp(Capsule->GetComponentRotation().Pitch, -90, 90);
+	Pitch = FMath::Clamp(Capsule->GetComponentRotation().Pitch, -45, 45);
 	Yaw = Capsule->GetComponentRotation().Yaw;
-	Roll = FMath::Clamp(Capsule->GetComponentRotation().Roll, -MaxTiltDegrees, MaxTiltDegrees);
+	Roll = FMath::Clamp(Capsule->GetComponentRotation().Roll, -45, 45);
 
 	FRotator ClampedRotation = FRotator(Pitch, Yaw, Roll);
 	Capsule->SetAllPhysicsRotation(ClampedRotation);
@@ -399,7 +416,7 @@ void UCustomPawnMovementComponent::SetSlide(bool bShouldSlide)
 
 void UCustomPawnMovementComponent::UpdateTimers(float DeltaTime)
 {
-	if (ShouldSkipUpdate(DeltaTime))
+	if (ShouldSkipTick(DeltaTime))
 	{
 		return;
 	}
@@ -424,7 +441,7 @@ void UCustomPawnMovementComponent::UpdateTimers(float DeltaTime)
 	}
 }
 
-bool UCustomPawnMovementComponent::ShouldSkipUpdate(float DeltaTime)
+bool UCustomPawnMovementComponent::ShouldSkipTick(float DeltaTime)
 {
 	return
 		PawnOwner->IsPendingKillPending() ||
