@@ -90,9 +90,6 @@ public:
 	UPROPERTY(EditAnywhere, Category = "GrappleHook|Components", meta = (AllowedClasses = "SceneComponent", UseComponentPicker))
 	FComponentReference GrappleAttachSceneComponentRef;
 
-	//UPROPERTY(EditDefaultsOnly, BlueprintReadWrite, Category = "GrappleHook|Components")
-	//class UCableComponent* Cable;
-
 
 	// 
 	// ===== TUNABLES ===== //
@@ -156,6 +153,18 @@ public:
 	bool bControlsRotation = true;
 
 
+	// ===== ROPE VISUALS ===== //
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GrappleHook|Visuals")
+	float NumberOfSegments = 24.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GrappleHook|Visuals")
+	float SolverIterations = 1.f;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GrappleHook|Visuals")
+	FVector RopeAttachOffset = FVector(0.f, 0.f, -40.f);
+
+
 	//
 	// ===== STATE ===== //
 	//
@@ -198,6 +207,9 @@ public:
 
 	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GrappleHook|State")
 	class USceneComponent* GrappleAttachSceneComponent;
+
+	UPROPERTY(EditAnywhere, BlueprintReadWrite, Category = "GrappleHook|State")
+	class UCableComponent* Cable;
 
 };
 

@@ -3,6 +3,7 @@
 
 #include "GrappleHookComponent.h"
 #include "Net/UnrealNetwork.h"
+#include "CableComponent.h"
 #include "Components/SceneComponent.h"
 #include "Components/CapsuleComponent.h"
 #include "GameFramework/Pawn.h"
@@ -168,12 +169,24 @@ void UGrappleHookComponent::ThrowGrapple()
 	}
 
 	GrappleFlightTimer += GetWorld()->GetDeltaSeconds();
+	if (GrappleFlightTimer <= GrappleFlightTime)
+	{
 
-	if (GrappleFlightTimer > GrappleFlightTime)
+	}
+	else if (GrappleFlightTimer > GrappleFlightTime)
 	{
 		GrappleAttachSceneComponent->SetWorldLocation(CurrentGrappleTarget->GetComponentLocation());
 		ToGrappleTarget = CurrentGrappleTarget->GetComponentLocation() - Capsule->GetComponentLocation();
 		CurrentGrappleDistance = ToGrappleTarget.Length();
+
+		if (Cable) Cable->DestroyComponent();
+		Cable = NewObject<UCableComponent>(this, UCableComponent::StaticClass());
+		Cable->RegisterComponent();
+		Cable->AttachToComponent(this, FAttachmentTransformRules::KeepRelativeTransform);
+		Cable->SetRelativeLocation(RopeAttachOffset);
+		Cable->CableLength = 0.f;
+		Cable->NumSegments = 1.f;
+
 
 		GrappleState = bIsInputDown ? EGrappleState::Swinging : EGrappleState::Ziplining;
 	}
@@ -209,6 +222,9 @@ void UGrappleHookComponent::ReleaseGrapple()
 		CustomMovementComponent->bIsUsingUprightSpring = true;
 		CustomMovementComponent->bIsGrounded = false;
 	}
+
+
+	if (Cable) Cable->DestroyComponent();
 
 	GrappleAttachSceneComponent->ResetRelativeTransform();
 	GrappleFlightTimer   = 0.f;
